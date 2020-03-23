@@ -1,0 +1,56 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.9~svn20110310	//
+App	app.rb	/^class App$/;"	c
+HuobiPro	huobi.rb	/^class HuobiPro$/;"	c
+accounts	huobi.rb	/^  def accounts$/;"	f	class:HuobiPro
+balances	huobi.rb	/^  def balances$/;"	f	class:HuobiPro
+batchcancel	huobi.rb	/^  def batchcancel(order_ids)$/;"	f	class:HuobiPro
+buy	app.rb	/^  def buy$/;"	f	class:App
+call	app.rb	/^  def call$/;"	f
+create_array	app.rb	/^  def create_array(amount:, value:)$/;"	f	class:App
+currencys	huobi.rb	/^  def currencys$/;"	f	class:HuobiPro
+current_money	app.rb	/^  def current_money$/;"	f
+depth	huobi.rb	/^  def depth(symbol,type="step0")$/;"	f	class:HuobiPro
+dump?	app.rb	/^  def dump?$/;"	f	class:App
+hash_sort	huobi.rb	/^  def hash_sort(ha)$/;"	f	class:HuobiPro
+history_kline	huobi.rb	/^  def history_kline(symbol,period,size=150)$/;"	f	class:HuobiPro
+history_matchresults	huobi.rb	/^  def history_matchresults(symbol)$/;"	f	class:HuobiPro
+history_trade	huobi.rb	/^  def history_trade(symbol,size=1)$/;"	f	class:HuobiPro
+initialize	app.rb	/^  def initialize(big_period_ma:, small_period_ma:)$/;"	f	class:App
+initialize	huobi.rb	/^  def initialize(access_key,secret_key,account_id,signature_version="2")$/;"	f	class:HuobiPro
+loan_orders	huobi.rb	/^  def loan_orders(symbol,currency)$/;"	f	class:HuobiPro
+log	app.rb	/^  def log(text)$/;"	f	class:App
+margin_accounts_balance	huobi.rb	/^  def margin_accounts_balance(symbol)$/;"	f	class:HuobiPro
+margin_orders	huobi.rb	/^  def margin_orders(symbol,currency,amount)$/;"	f	class:HuobiPro
+market_detail	huobi.rb	/^  def market_detail(symbol)$/;"	f	class:HuobiPro
+market_trade	huobi.rb	/^  def market_trade(symbol)$/;"	f	class:HuobiPro
+matchresults	huobi.rb	/^  def matchresults(order_id)$/;"	f	class:HuobiPro
+merged	huobi.rb	/^  def merged(symbol)$/;"	f	class:HuobiPro
+new_order	huobi.rb	/^  def new_order(symbol,side,price,count)$/;"	f	class:HuobiPro
+open_orders	huobi.rb	/^  def open_orders(symbol,side)$/;"	f	class:HuobiPro
+order_status	huobi.rb	/^  def order_status(order_id,market)$/;"	f	class:HuobiPro
+pump?	app.rb	/^  def pump?$/;"	f	class:App
+ready?	app.rb	/^  def ready?$/;"	f	class:App
+repay	huobi.rb	/^  def repay(order_id,amount)$/;"	f	class:HuobiPro
+sell	app.rb	/^  def sell$/;"	f	class:App
+sign	huobi.rb	/^  def sign(data)$/;"	f	class:HuobiPro
+submitcancel	huobi.rb	/^  def submitcancel(order_id)$/;"	f	class:HuobiPro
+symbols	huobi.rb	/^  def symbols$/;"	f	class:HuobiPro
+trade	app.rb	/^  def trade(time, price)$/;"	f	class:App
+trade_detail	huobi.rb	/^  def trade_detail(symbol)$/;"	f	class:HuobiPro
+transfer_in_margin	huobi.rb	/^  def transfer_in_margin(symbol,currency,amount)$/;"	f	class:HuobiPro
+transfer_out_margin	huobi.rb	/^  def transfer_out_margin(symbol,currency,amount)$/;"	f	class:HuobiPro
+trend_bear?	app.rb	/^  def trend_bear?$/;"	f	class:App
+trend_bull?	app.rb	/^  def trend_bull?$/;"	f	class:App
+update_big_ma	app.rb	/^  def update_big_ma$/;"	f	class:App
+update_ma	app.rb	/^  def update_ma$/;"	f	class:App
+update_price_history	app.rb	/^  def update_price_history(price)$/;"	f
+update_small_ma	app.rb	/^  def update_small_ma$/;"	f	class:App
+update_trend	app.rb	/^  def update_trend$/;"	f	class:App
+util	huobi.rb	/^  def util(path,params,request_method)$/;"	f	class:HuobiPro
+withdraw_virtual_cancel	huobi.rb	/^  def withdraw_virtual_cancel(withdraw_id)$/;"	f	class:HuobiPro
+withdraw_virtual_create	huobi.rb	/^  def withdraw_virtual_create(address,amount,currency)$/;"	f	class:HuobiPro

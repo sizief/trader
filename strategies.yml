@@ -1,0 +1,24 @@
+60-5-02:
+  seed_money: 100
+  big_period_ma: 60
+  small_period_ma: 5
+  stop_loss_limit: 0.02
+  ma_gap: 2
+60-5-05:
+  seed_money: 100
+  big_period_ma: 60
+  small_period_ma: 5
+  stop_loss_limit: 0.05
+  ma_gap: 2
+1200-300:
+  seed_money: 100
+  big_period_ma: 1200
+  small_period_ma: 300
+  stop_loss_limit: 0.1
+  ma_gap: 10
+1800-300:
+  seed_money: 100
+  big_period_ma: 1800
+  small_period_ma: 300
+  stop_loss_limit: 0.1
+  ma_gap: 10
