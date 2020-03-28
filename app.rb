@@ -8,7 +8,7 @@ class App
   TRADE_FEE = 0.002
   DELAY_AFTER_SELL = 30 #wait 30 seconds after sale
 
-  def initialize(seed_money: 100,big_period_ma:, small_period_ma:, stop_loss_limit: 0.1, ma_gap: 1)
+  def initialize(debug: false, seed_money: 100,big_period_ma:, small_period_ma:, stop_loss_limit: 0.1, ma_gap: 1)
     access_key = ENV['HUOBI_ACCESS_KEY']
     secret_key = ENV['HUOBI_SECRET_KEY']
     account_id = ENV['HUOBI_ACCOUNT_ID']
@@ -24,6 +24,7 @@ class App
     @pause_after_sale = false
     @stop_loss_limit = stop_loss_limit
     @ma_gap = ma_gap
+    @debug = debug
   end
 
   def create_array(amount:, value:)
@@ -87,7 +88,7 @@ class App
     @buy_price = @prices.last
     @buy_amount = @money.to_f
     @money = 0
-    log "buy at: #{@buy_price}, #{@trends.last}, #{current_money}, BUY, #{Time.now}"
+    log "#{'-'*70}\n\n #{Time.now.strftime("%m-%d|%H:%M:%S")} | buy at: #{@buy_price}, #{@trends.last}, #{current_money}, BUY \n #{'-'*70}\n"
   end
 
   def sell
@@ -97,7 +98,7 @@ class App
     @bitcoin = 0
     @buy_amount = 0
     @sell_time = Time.now
-    log "bought: #{@buy_price}, sell at: #{@prices.last}, #{@trends.last}, #{current_money}, SELL, #{Time.now}"
+    log "#{'-'*70} \n\n #{Time.now.strftime("%m-%d|%H:%M:%S")} | bought: #{@buy_price}, sell at: #{@prices.last}, #{@trends.last}, #{current_money}, SELL \n #{'-'*70}\n"
   end
 
   def update_small_ma
@@ -161,7 +162,7 @@ class App
       trade(last_tick['ts'], last_tick['price']) 
 
       sleep 0.3
-      log "#{@trends.last} | #{@prices.last} | #{current_money} #{@position_active ? ' | '+ARGV[0]+': '+@buy_price.to_s : ''}" if ready?
+      log "#{Time.now.strftime("%m-%d|%H:%M:%S")} | #{@debug ? 'Bma: '+@big_ma.round(3).to_s+', Sma: '+@small_ma.round(2).to_s : ''} | #{@trends.last} | #{@prices.last} | #{current_money} | #{@buy_price.to_s if @position_active}" if ready?
     end
   end
 end
@@ -176,6 +177,10 @@ App.new(
   big_period_ma: params["big_period_ma"],
   small_period_ma: params["small_period_ma"],
   stop_loss_limit: params["stop_loss_limit"],
-  ma_gap: params["ma_gap"]
+  ma_gap: params["ma_gap"],
+  debug: ARGV[1]
 ).call
+
+# Sample example
+# ruby app.rb 24-8 true
 
