@@ -5,7 +5,8 @@ class MarketMaker
   Result = Struct.new(:ok, :message, :data)
   Price = Struct.new(:tmn, :btc)
   OrderParams = Struct.new(:symbol, :size, :side, :price, :type, keyword_init: true)
-  OrderBook = Struct.new(:bid,:ask, keyword_init: true)
+  OrderBook = Struct.new(:bids,:asks, keyword_init: true)
+  OrderBookDetail = Struct.new(:price, :size, keyword_init: true)
   MARKET_SIDES = %w(buy sell)
   ORDER_TYPE = 'limit'
   PRICE_STEP = 50_000
@@ -20,9 +21,36 @@ class MarketMaker
 
   def call
     if active_order?
-      p 'not empty' #update_price
+      update_price
     else
-      (balance.tmn > 20_000) ? create_bid : create_ask
+      logger.info("CREATING ORDER: available orders: #{orders}")
+      (balance.tmn > 50_000) ? create_bid : create_ask
+    end
+  end
+
+  def update_price
+    order_price = orders.first['price'].to_f
+    order_side = orders.first['side']
+    order_size = orders.first['size']
+
+    if (order_side == 'buy') && (order_price < order_books.bids.first.price)
+      cancel
+      refresh_order_books
+      create_bid
+    elsif (order_side == 'buy') && ((order_price - PRICE_STEP) != order_books.bids[1].price) && (order_size == order_books.bids.first.size)
+      cancel
+      refresh_order_books
+      create_bid
+    elsif (order_side == 'sell') && (order_price > order_books.asks.first.price)
+      cancel
+      refresh_order_books
+      create_ask
+    elsif (order_side == 'sell') && ((order_price + PRICE_STEP) != order_books.asks[1].price) && (order_size == order_books.asks.first.size)
+      cancel
+      refresh_order_books
+      create_ask
+    else
+      logger.info("STATUS CHECKED: #{orders.first['price']} | bid: #{order_books.bids.first.price}, ask: #{order_books.asks.first.price}")
     end
   end
 
@@ -35,9 +63,32 @@ class MarketMaker
     orders = exchange.order_books(symbol: symbol)[symbol]
 
     @order_books = OrderBook.new(
-      bid: orders['bids'].first.first.to_f,
-      ask: orders['asks'].first.first.to_f
+      bids: [
+        OrderBookDetail.new(
+          price: orders['bids'].first.first.to_f,
+          size: orders['bids'].first[1].to_f
+        ),
+        OrderBookDetail.new(
+          price: orders['bids'][1].first.to_f,
+          size: orders['bids'][1][1].to_f
+        )
+      ],
+      asks: [
+        OrderBookDetail.new(
+          price: orders['asks'].first.first.to_f, 
+          size: orders['asks'].first[1].to_f
+        ),
+        OrderBookDetail.new(
+          price: orders['asks'][1].first.to_f, 
+          size: orders['asks'][1][1].to_f
+        )
+      ]
     )
+  end
+
+  def refresh_order_books
+    @order_books = false
+    order_books
   end
 
   def balance
@@ -47,8 +98,21 @@ class MarketMaker
     @balance = Price.new(balance['fiat_available'].to_f, balance['btc_available'].to_f)
   end
 
+  def can_create_order?(params)
+    if (params.side == 'sell') && (params.price == order_books.bids.first.price)
+      logger.info("CAN NOT CREATE ASK ORDER: best bid:#{order_books.bids.first.price}, my ask: #{params.price}")
+      return false
+    elsif (params.side == 'buy') && (params.price == order_books.asks.first.price)
+      logger.info("CAN NOT CREATE BID ORDER: best ask:#{order_books.asks.first.price}, my bid: #{params.price}")
+      return false
+    else
+      true
+    end
+  end
+
   def create(params)
     return Result.new(false, 'Type is wrong') unless MARKET_SIDES.include?(params.side)
+    return unless can_create_order?(params)
 
     data =exchange.create_order(
       symbol: params.symbol,
@@ -58,17 +122,16 @@ class MarketMaker
       price: params.price
     )
 
-    logger.info("#{params.side.upcase} BUY ORDER: #{data}")
-#    Result.new(true, "Order created", data)
+    logger.info("#{params.side.upcase} ORDER: #{data}")
   end
 
   def cancel
     current_orders = orders
-    return Result.new(false, 'Nothing to cancel') if current_orders.empty?
+    logger.info("CANCELLING ORDER FAILED: nothing to cancel") if current_orders.empty?
 
-    data = exchange.cancel_order(order_id: current_orders.first['id'])
+    data =exchange.cancel_order(order_id: current_orders.first['id'])
 
-    Result.new(true, 'Cancelled', data)
+    logger.info("ORDER CANCELLED: #{data}")
   end
 
   def orders
@@ -88,7 +151,8 @@ class MarketMaker
   end
 
   def bid_params
-    bid_price = order_books.bid + PRICE_STEP
+    price_step = ((order_books.bids.first.price + PRICE_STEP) == order_books.asks.first.price) ? 0 : PRICE_STEP
+    bid_price = order_books.bids.first.price + price_step
     bid_size = (balance.tmn*0.95)/bid_price
 
     params = OrderParams.new(
@@ -99,14 +163,15 @@ class MarketMaker
       type: ORDER_TYPE
     )
 
-    logger.info("PREPARING_BID_ORDER: #{order_books.bid}, #{order_books.ask}, #{balance.tmn}, #{params}")
+    logger.info("PREPARING_BID_ORDER: #{order_books.bids.first.price}, #{order_books.asks.first.price}, #{balance.tmn}, #{params}")
 
     params
   end
 
   def ask_params
-    ask_price = order_books.ask - PRICE_STEP
-    ask_size = balance.btc
+    price_step = ((order_books.asks.first.price - PRICE_STEP) == order_books.bids.first.price) ? 0 : PRICE_STEP
+    ask_price = order_books.asks.first.price - price_step
+    ask_size = balance.btc*0.96
 
     params = OrderParams.new(
       symbol: symbol, 
@@ -116,23 +181,13 @@ class MarketMaker
       type: ORDER_TYPE
     )
 
-    logger.info("PREPARING_BID_ORDER: #{order_books.bid}, #{order_books.ask}, #{balance.btc}, #{params}")
+    logger.info("PREPARING_ASK_ORDER: #{params}")
 
     params
   end
 end
 
-mm = MarketMaker.new(symbol: 'btc-tmn')
-mm.call
-mm.call
-mm.call
-mm.call
-abort
-
-#result = mm.create(symbol: symbol, side: 'buy', size: bid_size, price: bid_price)
-#logger.info("ORDER_CREATED: #{result.data}")
-
-result = mm.cancel
-logger.info("ORDER_CANCELLED: #{result.message}, #{result.data}")
-
-
+while true
+  MarketMaker.new(symbol: 'btc-tmn').call
+  sleep 0.5
+end
