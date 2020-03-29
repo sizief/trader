@@ -1,7 +1,7 @@
 #
 # 1. Place and order for buy for cheapest price
-# 2. After successful order, place an order for sell with highest price
-# 3. Monitor if your price for sell or ut is at the top of the queue, NO REGARD ON THE BUY OR SELL PRICE
+# 2. After successful order, place an order for sell for minimum price of buy
+# 3. Monitor to update sell price if ?
 # 4. Repeat
 #
 # USAGE: ruby app.rb
@@ -10,7 +10,7 @@
 require_relative 'exir'
 require 'dotenv/load'
 
-class MarketMaker
+class MarketMakerLimit
   Result = Struct.new(:ok, :message, :data)
   Price = Struct.new(:tmn, :btc)
   OrderParams = Struct.new(:symbol, :size, :side, :price, :type, keyword_init: true)
@@ -22,13 +22,29 @@ class MarketMaker
 
   attr_reader :exchange, :symbol, :logger
 
-  def initialize(symbol:, logger: Logger.new('./logfile.log'))
+  def initialize(symbol:, logger: Logger.new('./log/mm-limit.log'))
     @exchange = Exir.new(access_token: ENV['EXIR_ACCESS_TOKEN'], test: false)
     @symbol = symbol
     @logger = logger
   end
 
-  def call
+  def save_price 
+    file = File.open("mm-limit-buy-price", 'w') 
+    file.write { |f| f << amount }
+    file.close
+  end
+
+  def but_price
+    file = File.open("mm-limit-buy-price", 'r') 
+    amount = file.read.to_f
+    file.close
+
+    amount
+  end
+
+  def call(amount) 
+    return
+    abort
     if active_order?
       update_price
     else
@@ -197,6 +213,6 @@ class MarketMaker
 end
 
 while true
-  MarketMaker.new(symbol: 'btc-tmn').call
-  sleep 0.5
+  MarketMakerLimit.new(symbol: 'btc-tmn').call(175123000)
+  #sleep 0.5
 end

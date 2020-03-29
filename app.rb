@@ -1,3 +1,11 @@
+#
+# Simulate on Huobi real data to constantly trade based on MAs
+# configurations for MA can be set at strategies.yml and then it can be run based on defined strategy.
+#
+# USAGE: ruby app.rb 24-8 true
+# ARGV[0] : Strategy name 
+# ARGV[1] : print debug data
+#
 require_relative 'huobi.rb'
 require 'dotenv/load'
 require 'yaml'
@@ -180,7 +188,4 @@ App.new(
   ma_gap: params["ma_gap"],
   debug: ARGV[1]
 ).call
-
-# Sample example
-# ruby app.rb 24-8 true
 
