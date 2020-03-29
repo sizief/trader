@@ -50,12 +50,12 @@ class MarketMaker
       refresh_order_books
       create_ask
     else
-      logger.info("STATUS CHECKED: #{orders.first['price']} | bid: #{order_books.bids.first.price}, ask: #{order_books.asks.first.price}")
+      logger.info("STATUS CHECKED: #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
     end
   end
 
   def active_order?
-    !orders.empty?
+    !orders.nil? && !orders.empty?
   end
 
   def order_books
