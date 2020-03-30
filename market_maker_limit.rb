@@ -22,7 +22,7 @@ class MarketMakerLimit
   PRICE_STEP = 50_000
   MINIMUM_ASK_PRICE = 100_000_000
   MAXIMUM_BID_PRICE = 130_000_000
-  WAIT_ON_BUY_PRICE = 60*60
+  WAIT_ON_BUY_PRICE = 60*90
 
   attr_reader :exchange, :symbol, :logger
 
@@ -31,7 +31,6 @@ class MarketMakerLimit
     @symbol = symbol
     @logger = logger
   end
-
 
   def call
     if active_order?
@@ -76,7 +75,12 @@ class MarketMakerLimit
     order_side = orders.first['side']
     order_size = orders.first['size']
 
-    return if ((order_side == 'sell') && buy_price && (order_price == buy_price)) #selling at the minimum price
+    if ((order_side == 'sell') && buy_price && (order_price == buy_price))
+      if (order_price != order_books.asks.first.price) || (order_books.asks.first.size != order_size) || (order_price+PRICE_STEP == order_books.asks[1].price)
+        log_status
+        return
+      end
+    end
 
     if (order_side == 'buy') && (order_price < order_books.bids.first.price)
       cancel
@@ -95,8 +99,12 @@ class MarketMakerLimit
       refresh_order_books
       create_ask
     else
-      logger.info("STATUS CHECKED: last buy price: #{buy_price} | #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
+      log_status
     end
+  end
+
+  def log_status
+    logger.info("STATUS CHECKED: last buy price: #{buy_price} | #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
   end
 
   def active_order?
