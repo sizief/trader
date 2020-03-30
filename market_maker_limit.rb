@@ -22,6 +22,7 @@ class MarketMakerLimit
   PRICE_STEP = 50_000
   MINIMUM_ASK_PRICE = 100_000_000
   MAXIMUM_BID_PRICE = 130_000_000
+  WAIT_ON_BUY_PRICE = 60*60
 
   attr_reader :exchange, :symbol, :logger
 
@@ -55,7 +56,7 @@ class MarketMakerLimit
       buy_order = YAML.load(File.read('mm-limit_order.yml'))
 
       return nil unless buy_order #file is empty
-      return nil if Time.now - Time.at(buy_order[:time]) > 60*60 # wait one hour to sell at buy price
+      return nil if Time.now - Time.at(buy_order[:time]) > WAIT_ON_BUY_PRICE # wait one hour to sell at buy price
       return buy_order[:price].to_f
     rescue Errno::ENOENT
       return nil
@@ -75,7 +76,7 @@ class MarketMakerLimit
     order_side = orders.first['side']
     order_size = orders.first['size']
 
-    return if ((order_side == 'sell') && (order_price == buy_price)) #selling at the minimum price
+    return if ((order_side == 'sell') && buy_price && (order_price == buy_price)) #selling at the minimum price
 
     if (order_side == 'buy') && (order_price < order_books.bids.first.price)
       cancel
