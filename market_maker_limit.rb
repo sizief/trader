@@ -9,6 +9,7 @@
 #
 require_relative 'exir'
 require 'dotenv/load'
+require 'yaml'
 
 class MarketMakerLimit
   Result = Struct.new(:ok, :message, :data)
@@ -19,6 +20,8 @@ class MarketMakerLimit
   MARKET_SIDES = %w(buy sell)
   ORDER_TYPE = 'limit'
   PRICE_STEP = 50_000
+  MINIMUM_ASK_PRICE = 100_000_000
+  MAXIMUM_BID_PRICE = 130_000_000
 
   attr_reader :exchange, :symbol, :logger
 
@@ -28,23 +31,8 @@ class MarketMakerLimit
     @logger = logger
   end
 
-  def save_price 
-    file = File.open("mm-limit-buy-price", 'w') 
-    file.write { |f| f << amount }
-    file.close
-  end
 
-  def but_price
-    file = File.open("mm-limit-buy-price", 'r') 
-    amount = file.read.to_f
-    file.close
-
-    amount
-  end
-
-  def call(amount) 
-    return
-    abort
+  def call
     if active_order?
       update_price
     else
@@ -53,10 +41,41 @@ class MarketMakerLimit
     end
   end
 
+  private
+
+  def save_order(order)
+    return if sell?(order.side) # We are saving buy order here for now
+
+    order = {price: order.price, size: order.size, time: Time.now.to_i}
+    File.open("mm-limit_order.yml", "w") { |file| file.write(order.to_yaml) }
+  end
+
+  def buy_price
+    begin 
+      buy_order = YAML.load(File.read('mm-limit_order.yml'))
+
+      return nil unless buy_order #file is empty
+      return nil if Time.now - Time.at(buy_order[:time]) > 60*60 # wait one hour to sell at buy price
+      return buy_order[:price].to_f
+    rescue Errno::ENOENT
+      return nil
+    end
+  end
+
+  def sell?(side)
+    side == 'sell'
+  end
+
+  def buy?(param)
+    side == 'buy'
+  end
+
   def update_price
     order_price = orders.first['price'].to_f
     order_side = orders.first['side']
     order_size = orders.first['size']
+
+    return if ((order_side == 'sell') && (order_price == buy_price)) #selling at the minimum price
 
     if (order_side == 'buy') && (order_price < order_books.bids.first.price)
       cancel
@@ -75,7 +94,7 @@ class MarketMakerLimit
       refresh_order_books
       create_ask
     else
-      logger.info("STATUS CHECKED: #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
+      logger.info("STATUS CHECKED: last buy price: #{buy_price} | #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
     end
   end
 
@@ -136,8 +155,9 @@ class MarketMakerLimit
   end
 
   def create(params)
-    return Result.new(false, 'Type is wrong') unless MARKET_SIDES.include?(params.side)
+    return Result.new(false, 'Side is wrong') unless MARKET_SIDES.include?(params.side)
     return unless can_create_order?(params)
+    return if min_or_max_price_crossed?(params)
 
     data =exchange.create_order(
       symbol: params.symbol,
@@ -147,7 +167,15 @@ class MarketMakerLimit
       price: params.price
     )
 
+    save_order(params)
     logger.info("#{params.side.upcase} ORDER: #{data}")
+  end
+
+  def min_or_max_price_crossed?(params)
+    return false if params.side == 'buy' && params.price < MAXIMUM_BID_PRICE 
+    return false if params.side == 'sell' && params.price > MINIMUM_ASK_PRICE
+
+    logger.info("PRICE MIN OR MAX CROSSED: #{params}")
   end
 
   def cancel
@@ -196,6 +224,8 @@ class MarketMakerLimit
   def ask_params
     price_step = ((order_books.asks.first.price - PRICE_STEP) == order_books.bids.first.price) ? 0 : PRICE_STEP
     ask_price = order_books.asks.first.price - price_step
+    ask_price = buy_price if buy_price && ask_price < buy_price
+
     ask_size = balance.btc*0.96
 
     params = OrderParams.new(
@@ -213,6 +243,6 @@ class MarketMakerLimit
 end
 
 while true
-  MarketMakerLimit.new(symbol: 'btc-tmn').call(175123000)
-  #sleep 0.5
+  MarketMakerLimit.new(symbol: 'btc-tmn').call()
+  sleep 0.5
 end
