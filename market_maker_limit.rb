@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 #
 # 1. Place and order for buy for cheapest price
 # 2. After successful order, place an order for sell for minimum price of buy
@@ -15,14 +17,13 @@ class MarketMakerLimit
   Result = Struct.new(:ok, :message, :data)
   Price = Struct.new(:tmn, :btc)
   OrderParams = Struct.new(:symbol, :size, :side, :price, :type, keyword_init: true)
-  OrderBook = Struct.new(:bids,:asks, keyword_init: true)
+  OrderBook = Struct.new(:bids, :asks, keyword_init: true)
   OrderBookDetail = Struct.new(:price, :size, keyword_init: true)
-  MARKET_SIDES = %w(buy sell)
+  MARKET_SIDES = %w[buy sell].freeze
   ORDER_TYPE = 'limit'
   PRICE_STEP = 50_000
   MINIMUM_ASK_PRICE = 100_000_000
   MAXIMUM_BID_PRICE = 130_000_000
-  WAIT_ON_BUY_PRICE = 60*90
 
   attr_reader :exchange, :symbol, :logger
 
@@ -37,8 +38,11 @@ class MarketMakerLimit
       update_price
     else
       logger.info("CREATING ORDER: available orders: #{orders}")
-      (balance.tmn > 50_000) ? create_bid : create_ask
+      balance.tmn > 50_000 ? create_bid : create_ask
     end
+  rescue StandardError => error
+    p error
+    return
   end
 
   private
@@ -46,27 +50,29 @@ class MarketMakerLimit
   def save_order(order)
     return if sell?(order.side) # We are saving buy order here for now
 
-    order = {price: order.price, size: order.size, time: Time.now.to_i}
-    File.open("mm-limit_order.yml", "w") { |file| file.write(order.to_yaml) }
+    order = { price: order.price, size: order.size, time: Time.now.to_i }
+    File.open('mm-limit_order.yml', 'w') { |file| file.write(order.to_yaml) }
   end
 
   def buy_price
-    begin 
-      buy_order = YAML.load(File.read('mm-limit_order.yml'))
+    buy_order = YAML.safe_load(File.read('mm-limit_order.yml'), [Symbol])
 
-      return nil unless buy_order #file is empty
-      return nil if Time.now - Time.at(buy_order[:time]) > WAIT_ON_BUY_PRICE # wait one hour to sell at buy price
-      return buy_order[:price].to_f
-    rescue Errno::ENOENT
+    return nil unless buy_order # file is empty
+
+    if buy_order[:price] - ((order_books.asks.first.price + order_books.asks[1].price)/2) > 700_000
       return nil
     end
+
+    buy_order[:price].to_f
+  rescue Errno::ENOENT
+    nil
   end
 
   def sell?(side)
     side == 'sell'
   end
 
-  def buy?(param)
+  def buy?(_param)
     side == 'buy'
   end
 
@@ -75,8 +81,8 @@ class MarketMakerLimit
     order_side = orders.first['side']
     order_size = orders.first['size']
 
-    if ((order_side == 'sell') && buy_price && (order_price == buy_price))
-      if (order_price != order_books.asks.first.price) || (order_books.asks.first.size != order_size) || (order_price+PRICE_STEP == order_books.asks[1].price)
+    if (order_side == 'sell') && buy_price && (order_price == buy_price)
+      if (order_price != order_books.asks.first.price) || (order_books.asks.first.size != order_size) || (order_price + PRICE_STEP == order_books.asks[1].price)
         log_status
         return
       end
@@ -108,12 +114,14 @@ class MarketMakerLimit
   end
 
   def active_order?
-    !orders.nil? && !orders.empty?
+    !orders.nil? && !orders.empty? 
   end
 
   def order_books
     return @order_books if @order_books
+
     orders = exchange.order_books(symbol: symbol)[symbol]
+    raise '403 error' if orders['message'] == 'error'
 
     @order_books = OrderBook.new(
       bids: [
@@ -128,11 +136,11 @@ class MarketMakerLimit
       ],
       asks: [
         OrderBookDetail.new(
-          price: orders['asks'].first.first.to_f, 
+          price: orders['asks'].first.first.to_f,
           size: orders['asks'].first[1].to_f
         ),
         OrderBookDetail.new(
-          price: orders['asks'][1].first.to_f, 
+          price: orders['asks'][1].first.to_f,
           size: orders['asks'][1][1].to_f
         )
       ]
@@ -154,21 +162,23 @@ class MarketMakerLimit
   def can_create_order?(params)
     if (params.side == 'sell') && (params.price == order_books.bids.first.price)
       logger.info("CAN NOT CREATE ASK ORDER: best bid:#{order_books.bids.first.price}, my ask: #{params.price}")
-      return false
+      false
     elsif (params.side == 'buy') && (params.price == order_books.asks.first.price)
       logger.info("CAN NOT CREATE BID ORDER: best ask:#{order_books.asks.first.price}, my bid: #{params.price}")
-      return false
+      false
     else
       true
     end
   end
 
   def create(params)
-    return Result.new(false, 'Side is wrong') unless MARKET_SIDES.include?(params.side)
+    unless MARKET_SIDES.include?(params.side)
+      return Result.new(false, 'Side is wrong')
+    end
     return unless can_create_order?(params)
     return if min_or_max_price_crossed?(params)
 
-    data =exchange.create_order(
+    data = exchange.create_order(
       symbol: params.symbol,
       side: params.side,
       size: params.size,
@@ -181,7 +191,7 @@ class MarketMakerLimit
   end
 
   def min_or_max_price_crossed?(params)
-    return false if params.side == 'buy' && params.price < MAXIMUM_BID_PRICE 
+    return false if params.side == 'buy' && params.price < MAXIMUM_BID_PRICE
     return false if params.side == 'sell' && params.price > MINIMUM_ASK_PRICE
 
     logger.info("PRICE MIN OR MAX CROSSED: #{params}")
@@ -189,9 +199,11 @@ class MarketMakerLimit
 
   def cancel
     current_orders = orders
-    logger.info("CANCELLING ORDER FAILED: nothing to cancel") if current_orders.empty?
+    if current_orders.empty?
+      logger.info('CANCELLING ORDER FAILED: nothing to cancel')
+    end
 
-    data =exchange.cancel_order(order_id: current_orders.first['id'])
+    data = exchange.cancel_order(order_id: current_orders.first['id'])
 
     logger.info("ORDER CANCELLED: #{data}")
   end
@@ -213,12 +225,12 @@ class MarketMakerLimit
   end
 
   def bid_params
-    price_step = ((order_books.bids.first.price + PRICE_STEP) == order_books.asks.first.price) ? 0 : PRICE_STEP
+    price_step = (order_books.bids.first.price + PRICE_STEP) == order_books.asks.first.price ? 0 : PRICE_STEP
     bid_price = order_books.bids.first.price + price_step
-    bid_size = (balance.tmn*0.95)/bid_price
+    bid_size = (balance.tmn * 0.95) / bid_price
 
     params = OrderParams.new(
-      symbol: symbol, 
+      symbol: symbol,
       size: bid_size,
       side: 'buy',
       price: bid_price,
@@ -231,14 +243,14 @@ class MarketMakerLimit
   end
 
   def ask_params
-    price_step = ((order_books.asks.first.price - PRICE_STEP) == order_books.bids.first.price) ? 0 : PRICE_STEP
+    price_step = (order_books.asks.first.price - PRICE_STEP) == order_books.bids.first.price ? 0 : PRICE_STEP
     ask_price = order_books.asks.first.price - price_step
     ask_price = buy_price if buy_price && ask_price < buy_price
 
-    ask_size = balance.btc*0.96
+    ask_size = balance.btc * 0.96
 
     params = OrderParams.new(
-      symbol: symbol, 
+      symbol: symbol,
       size: ask_size,
       side: 'sell',
       price: ask_price,
@@ -251,7 +263,7 @@ class MarketMakerLimit
   end
 end
 
-while true
-  MarketMakerLimit.new(symbol: 'btc-tmn').call()
+loop do
+  MarketMakerLimit.new(symbol: 'btc-tmn').call
   sleep 0.5
 end
