@@ -1,16 +1,16 @@
 const https = require('https')
 const dotenv = require('dotenv');
 dotenv.config();
-console.log(process.env.NOBITEX_USERNAME)
-function call(data){
 
-  const payload = JSON.stringify(data)
+function call(params){
+
+  const payload = JSON.stringify(params.data)
 
   const options = {
     hostname: 'api.nobitex.ir',
     port: 443,
-    path: '/market/orders/list',
-    method: 'POST',
+    path: params.path,
+    method: params.method,
     headers: {
       'Content-Type': 'application/json',
       'Content-Length': payload.length
@@ -33,10 +33,29 @@ function call(data){
   req.end()
 }
 
-const data = {
-  order: "-price",
-  type: "sell",
-  dstCurrency: "rls",
-  srcCurrency: "btc"
+function orders(){
+  call({
+    method: "POST",
+    path: "/market/orders/list",
+    data: {
+      order: "-price",
+      type: "sell",
+      dstCurrency: "rls",
+      srcCurrency: "btc"
+    }
+  })
 }
-call(data)
+
+function authenticate(){
+  call({
+    method: "POST",
+    path: "/auth/login/",
+    data: {
+      username: process.env.NOBITEX_USERNAME,
+      password: process.env.NOBITEX_PASSWORD
+    }
+  })
+}
+
+//orders()
+authenticate()
