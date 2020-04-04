@@ -11,6 +11,7 @@
 require_relative 'exir'
 require 'dotenv/load'
 require 'yaml'
+require_relative './telegram'
 
 class MarketMakerLimit
   Result = Struct.new(:ok, :message, :data)
@@ -33,6 +34,11 @@ class MarketMakerLimit
     @exchange = Exir.new(access_token: ENV['EXIR_ACCESS_TOKEN'], test: false)
     @symbol = symbol
     @logger = logger
+    @telegram = Telegram.new
+  end
+
+  def notification(message)
+    @telegram.send_message(message)
   end
 
   def call
@@ -98,6 +104,7 @@ class MarketMakerLimit
       refresh_orders
     end
     logger.info("IMMEDIATE SELL DONE")
+    notification("IMMEDIATE SELL DONE")
     wait_after_loss
   end
 
@@ -155,6 +162,7 @@ class MarketMakerLimit
 
   def log_status
     logger.info("STATUS CHECKED: last buy price: #{buy_price} | #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
+
   end
 
   def active_order?
@@ -233,7 +241,9 @@ class MarketMakerLimit
     )
 
     save_order(params)
-    logger.info("#{params.side.upcase} ORDER: #{data}")
+    message = "#{params.side.upcase} ORDER: #{data}"
+    logger.info(message)
+    notification(message)
   end
 
   def min_or_max_price_crossed?(params)
@@ -260,7 +270,7 @@ class MarketMakerLimit
   end
 
   def refresh_orders
-    @orders = flase
+    @orders = false
     orders
   end
 
