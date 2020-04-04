@@ -1,9 +1,8 @@
 # frozen_string_literal: true
-
 #
-# 1. Place and order for buy for cheapest price
-# 2. After successful order, place an order for sell for minimum price of buy
-# 3. Monitor to update sell price if ?
+# 1. Place an order for buy. The price is as same as the best bid order.
+# 2. After successful order compilation, place an order for sell with the price of a highest ask order
+# 3. Monitor the price to make sure we are the best order on both sides
 # 4. Repeat
 #
 # USAGE: ruby app.rb
@@ -21,12 +20,12 @@ class MarketMakerLimit
   OrderBookDetail = Struct.new(:price, :size, keyword_init: true)
   MARKET_SIDES = %w[buy sell].freeze
   ORDER_TYPE = 'limit'
-  PRICE_STEP = 50_000
   MINIMUM_ASK_PRICE = 100_000_000
   MAXIMUM_BID_PRICE = 130_000_000
-  STOP_LOSS_LIMIT = 1_000_000
+  STOP_LOSS_LIMIT = 900_000
   WAIT_AFTER_LOSS = 15*60
   STOP_LOSS_DURATION = 30
+  ACCEPTABLE_BID_GAP = 250_000
 
   attr_reader :exchange, :symbol, :logger
 
@@ -96,6 +95,7 @@ class MarketMakerLimit
       refresh_order_books
       create_ask(true)
       sleep 10
+      refresh_orders
     end
     logger.info("IMMEDIATE SELL DONE")
     wait_after_loss
@@ -130,14 +130,18 @@ class MarketMakerLimit
   end
 
   def update_buy_price(order_price, order_size)
-    if order_price < order_books.bids.first.price
-      cancel
-      refresh_order_books
-      create_bid
-    elsif ((order_price - PRICE_STEP) != order_books.bids[1].price) && (order_size == order_books.bids.first.size)
-      cancel
-      refresh_order_books
-      create_bid
+    if (bids_price_gap < ACCEPTABLE_BID_GAP)
+      if (order_price < order_books.bids.first.price) || (order_price == order_books.bids.first.price && order_size == order_books.bids.first.size) 
+        cancel
+        refresh_order_books
+        create_bid
+      end
+    else 
+      if (order_price == order_books.bids.first.price) || (order_price < order_books.bids[1].price) || (order_price == order_books.bids[1].price && order_size == order_books.bids[1].size)
+        cancel
+        refresh_order_books
+        create_bid
+      end
     end
   end
 
@@ -149,7 +153,7 @@ class MarketMakerLimit
     end
   end
 
-  def log_status  
+  def log_status
     logger.info("STATUS CHECKED: last buy price: #{buy_price} | #{orders.first['price']}| Bid-> [#{order_books.bids[0].price}:#{order_books.bids[0].size}, #{order_books.bids[1].price}:#{order_books.bids[1].size}] | Ask->[#{order_books.asks[0].price}:#{order_books.asks[0].size}, #{order_books.asks[1].price}:#{order_books.asks[1].size}]")
   end
 
@@ -273,9 +277,16 @@ class MarketMakerLimit
     create(params: order_params, immediate_sell: immediate_sell)
   end
 
+  def bids_price_gap
+    order_books.bids.first.price - order_books.bids[1].price
+  end
+
+  def bid_price
+    price_index = (bids_price_gap < ACCEPTABLE_BID_GAP) ? 0 : 1
+    order_books.bids[price_index].price
+  end
+
   def bid_params
-    price_step = (order_books.bids.first.price + PRICE_STEP) == order_books.asks.first.price ? 0 : PRICE_STEP
-    bid_price = order_books.bids.first.price + price_step
     bid_size = ((balance.tmn) / bid_price).floor(4)
 
     params = OrderParams.new(
@@ -286,7 +297,7 @@ class MarketMakerLimit
       type: ORDER_TYPE
     )
 
-    logger.info("PREPARING_BID_ORDER: #{order_books.bids.first.price}, #{order_books.asks.first.price}, #{balance.tmn}, #{params}")
+    logger.info("PREPARING_BID_ORDER: #{order_books}, #{balance.tmn}, #{params}")
 
     params
   end
