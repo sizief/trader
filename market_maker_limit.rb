@@ -22,10 +22,10 @@ class MarketMakerLimit
   MARKET_SIDES = %w[buy sell].freeze
   ORDER_TYPE = 'limit'
   MINIMUM_ASK_PRICE = 100_000_000
-  MAXIMUM_BID_PRICE = 130_000_000
-  STOP_LOSS_LIMIT = 900_000
-  WAIT_AFTER_LOSS = 15*60
-  STOP_LOSS_DURATION = 30
+  MAXIMUM_BID_PRICE = 140_000_000
+  STOP_LOSS_LIMIT = 1_050_000
+  WAIT_AFTER_LOSS = 60*30
+  STOP_LOSS_DURATION = 100
   ACCEPTABLE_BID_GAP = 250_000
 
   attr_reader :exchange, :symbol, :logger
@@ -42,15 +42,21 @@ class MarketMakerLimit
   end
 
   def call
+    cancel if orders.count > 1 # keep one order at a time always
+
     if active_order?
       update_price
     else
+      sleep 1
+      refresh_orders
+      return if balance.tmn < 20_000 && balance.btc < 0.0001 # check active_record? false positive
+      return if active_order? # double check
+
       logger.info("CREATING ORDER: available orders: #{orders}")
-      balance.tmn > 50_000 ? create_bid : create_ask(false)
+      balance.tmn > balance.btc*buy_price ? create_bid : create_ask(false)
     end
   rescue StandardError => error
-    p error
-    return
+    notification(error)
   end
 
   private
@@ -96,16 +102,18 @@ class MarketMakerLimit
 
   def sell_immediatelly
     logger.info("IMMEDIATE SELL IN PROGRESS: buy price:#{buy_price} order books: #{order_books}")
-    while active_order? 
+    while true
       cancel
       refresh_order_books
+      refresh_balance
       create_ask(true)
       sleep 10
       refresh_orders
+      break if !active_order? && ((balance.btc * buy_price) < balance.tmn)
     end
     logger.info("IMMEDIATE SELL DONE")
     notification("IMMEDIATE SELL DONE")
-    wait_after_loss
+    wait_after_loss if !active_order? && ((balance.btc * buy_price) < balance.tmn)
   end
 
   def wait_after_loss
@@ -127,11 +135,13 @@ class MarketMakerLimit
   def stop_loss_crossed_for?(seconds)
     res = []
     1.upto(seconds) do
-      crossed = buy_price - order_books.bids.first.price > STOP_LOSS_LIMIT
+      crossed = (buy_price - order_books.bids.first.price > STOP_LOSS_LIMIT) && (buy_price - order_books.asks.first.price > STOP_LOSS_LIMIT/2)
       res.push crossed
       break unless crossed
       sleep 1
-      logger.info('STOP LOSS CROSSED')
+      refresh_order_books
+      logger.info("STOP LOSS CROSSED for #{order_books}")
+      notification("STOP LOSS CROSSED")
     end
     res.all?(true)
   end
@@ -211,6 +221,11 @@ class MarketMakerLimit
     @balance = Price.new(balance['fiat_available'].to_f, balance['btc_available'].to_f)
   end
 
+  def refresh_balance
+    @balance = false
+    balance
+  end
+
   def can_create_order?(params, immediate_sell)
     return true if immediate_sell
 
@@ -241,7 +256,7 @@ class MarketMakerLimit
     )
 
     save_order(params)
-    message = "#{params.side.upcase} ORDER: #{data}"
+    message = "#{params.side.upcase} ORDER: #{params.price} | #{data['message'].nil? ? 'ok' : data['message']} #{ ' | bought at: '+buy_price.to_s if sell?(params.side)}"
     logger.info(message)
     notification(message)
   end
@@ -254,14 +269,14 @@ class MarketMakerLimit
   end
 
   def cancel
-    current_orders = orders
-    if current_orders.empty?
+    if orders.empty?
       logger.info('CANCELLING ORDER FAILED: nothing to cancel')
     end
 
-    data = exchange.cancel_order(order_id: current_orders.first['id'])
-
-    logger.info("ORDER CANCELLED: #{data}")
+    orders.each do |order|
+      data = exchange.cancel_order(order_id: order['id'])
+      logger.info("ORDER CANCELLED: #{data}")
+    end
   end
 
   def orders
@@ -321,9 +336,7 @@ class MarketMakerLimit
   end
 
   def ask_params(immediate_sell)
-
     ask_size = balance.btc.floor(4)
-
     params = OrderParams.new(
       symbol: symbol,
       size: ask_size,
@@ -331,7 +344,6 @@ class MarketMakerLimit
       price: ask_price(immediate_sell),
       type: ORDER_TYPE
     )
-
     logger.info("PREPARING_ASK_ORDER: #{params}")
 
     params
