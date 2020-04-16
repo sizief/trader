@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 #
+# Good for steady market. SLOW seller.
+# 
 # 1. Place an order for buy. The price is as same as the best bid order.
 # 2. After successful order compilation, place an order for sell with the price of a highest ask order
-# 3. Monitor the price to make sure we are the best order on both sides
+# 3. Check if price is higher than buy price, sell with buy price
+# 4. If stop loss is passed, sell immeidatelly
+# 5. Monitor the price to make sure we are the best order on both sides
 # 4. Repeat
 #
-# USAGE: ruby app.rb
+# USAGE: ruby market_maker_limit.rb
 # BEWARE it will use all the money in the account
 #
 require_relative 'exir'
@@ -25,19 +29,22 @@ class MarketMakerLimit
   MAXIMUM_BID_PRICE = 140_000_000
   STOP_LOSS_LIMIT = 1_050_000
   WAIT_AFTER_LOSS = 60*30
-  STOP_LOSS_DURATION = 100
+  STOP_LOSS_DURATION = 60
   ACCEPTABLE_BID_GAP = 250_000
 
   attr_reader :exchange, :symbol, :logger
 
-  def initialize(symbol:, logger: Logger.new('./log/mm-limit.log'))
+  def initialize(symbol:, logger: Logger.new('./log/mm-limit.log'), notification_enabled: false)
     @exchange = Exir.new(access_token: ENV['EXIR_ACCESS_TOKEN'], test: false)
     @symbol = symbol
     @logger = logger
     @telegram = Telegram.new
+    @notification_enabled = notification_enabled
   end
 
   def notification(message)
+    return unless @notification_enabled
+
     @telegram.send_message(message)
   end
 
@@ -351,6 +358,6 @@ class MarketMakerLimit
 end
 
 loop do
-  MarketMakerLimit.new(symbol: 'btc-tmn').call
+  MarketMakerLimit.new(symbol: 'btc-tmn', notification_enabled: true).call
   sleep 0.5
 end
